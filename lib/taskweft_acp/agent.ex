@@ -336,7 +336,13 @@ defmodule TaskweftAcp.Agent do
             )
 
             {outcome, session} =
-              Run.run(session, ectx, effects: effects, log: log, cancelled?: cancelled?)
+              try do
+                Run.run(session, ectx, effects: effects, log: log, cancelled?: cancelled?)
+              rescue
+                e ->
+                  Emit.message(ctx.agent, session.id, "The run stopped: " <> Exception.message(e))
+                  {:ok, session}
+              end
 
             reason =
               case outcome do

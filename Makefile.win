@@ -1,0 +1,18 @@
+# The store helper on Windows (nmake under vcvars64): plain mode only, because the
+# FoundationDB client has no Windows build here (RFD 2113). SQLITE_INC and SQLITE_LIB
+# name the pixi env's include and lib directories.
+PRIV_DIR = priv
+SQLITE_INC = $(SQLITE_INC)
+SQLITE_LIB = $(SQLITE_LIB)
+TARGET = $(PRIV_DIR)\weft_sql.exe
+
+all: $(TARGET)
+
+$(PRIV_DIR):
+	if not exist $(PRIV_DIR) mkdir $(PRIV_DIR)
+
+$(TARGET): c_src\weft_sql.c $(PRIV_DIR)
+	cl /nologo /O2 /W3 /D_CRT_SECURE_NO_WARNINGS /I"$(SQLITE_INC)" c_src\weft_sql.c /Fe:$(TARGET) /Fo:c_src\ /link /LIBPATH:"$(SQLITE_LIB)" sqlite3.lib
+
+clean:
+	if exist $(TARGET) del $(TARGET)

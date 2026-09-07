@@ -11,3 +11,5 @@ erl_crash.dump
 /.taskweft-acp/
 /thirdparty/
 /priv/plts/
+/priv/sqlite3.dll
+/.pixi/

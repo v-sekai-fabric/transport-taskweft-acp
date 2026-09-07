@@ -65,11 +65,29 @@ defmodule TaskweftAcp.Domain do
     with true <- File.exists?(path),
          {:ok, ast} <- Code.string_to_quoted(File.read!(path)),
          %{exec: overlay} <- literal(ast) do
-      Map.merge(exec, normalize_exec(overlay), fn _k, base, over -> Map.merge(base, over) end)
+      merge_overlay(exec, overlay)
     else
       _ -> exec
     end
   end
+
+  # Only the keys the overlay names change; a new action gets the full shape.
+  defp merge_overlay(exec, overlay) when is_map(overlay) do
+    empty = %{kind: :terminal, command: nil, args: [], path: nil, requires: nil}
+
+    Enum.reduce(overlay, exec, fn
+      {action, spec}, acc when is_map(spec) ->
+        over = Map.new(spec, fn {k, v} -> {to_atom(k), coerce(to_atom(k), v)} end)
+        Map.update(acc, to_string(action), Map.merge(empty, over), &Map.merge(&1, over))
+
+      _, acc ->
+        acc
+    end)
+  end
+
+  defp coerce(:kind, v), do: to_atom(v)
+  defp coerce(:args, v) when is_list(v), do: Enum.map(v, &to_string/1)
+  defp coerce(_k, v), do: v
 
   @doc "Substitute `{param}` placeholders; an argument that is exactly a placeholder becomes the value."
   @spec bind(exec, %{String.t() => term()}) :: exec
