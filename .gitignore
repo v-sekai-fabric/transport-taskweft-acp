@@ -1,0 +1,13 @@
+/_build/
+/deps/
+/cover/
+/doc/
+/priv/weft_sql
+/priv/weft_sql.exe
+/c_src/*.o
+/c_src/*.obj
+*.beam
+erl_crash.dump
+/.taskweft-acp/
+/thirdparty/
+/priv/plts/

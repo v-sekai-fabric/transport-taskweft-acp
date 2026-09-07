@@ -1,0 +1,15 @@
+cff-version: 1.2.0
+message: If you use this software, please cite it as below.
+title: transport-taskweft-acp
+type: software
+authors:
+  - family-names: Lee
+    given-names: K. S. Ernest (iFire)
+    email: ernest.lee@chibifire.com
+license: MIT
+repository-code: https://github.com/v-sekai-fabric/transport-taskweft-acp
+abstract: >-
+  An Agent Client Protocol agent with no language model: a deterministic grammar turns a
+  prompt into a taskweft planning problem, the plan is executed step by step through the
+  editor's file system and terminal under its permission, and every session is an event
+  log in the workspace's FoundationDB-backed SQLite store.
