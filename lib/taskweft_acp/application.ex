@@ -15,7 +15,7 @@ defmodule TaskweftAcp.Application do
     children =
       if Application.get_env(:taskweft_acp, :serve, false) do
         [
-          TaskweftAcp.Session.Store,
+          {TaskweftAcp.Session.Store, on_unreachable: :degrade},
           TaskweftAcp.Executor.Registry,
           {Plug.Cowboy,
            scheme: :http,

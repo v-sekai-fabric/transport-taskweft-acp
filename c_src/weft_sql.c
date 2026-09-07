@@ -273,6 +273,7 @@ static int do_txn(char op, char *args) {
 	if (rc) return reply_error("txn failed", rc);
 	puts("{\"ok\":true}");
 	fflush(stdout);
+	return 0;
 #else
 	(void)op;
 	(void)args;

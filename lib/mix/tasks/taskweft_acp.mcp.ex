@@ -16,7 +16,7 @@ defmodule Mix.Tasks.TaskweftAcp.Mcp do
     Application.put_env(:ex_mcp, :stdio_mode, true)
     Logger.configure(level: :emergency)
     _ = :logger.set_primary_config(:level, :emergency)
-    Mix.Task.run("app.start")
+    Mix.Task.run("app.start", ["--no-compile"])
     {:ok, _} = TaskweftAcp.Session.Store.start_link([])
     {:ok, _} = TaskweftAcp.Bridge.start_link([])
     {:ok, _} = ExMCP.Server.StdioServer.start_link(module: TaskweftAcp.Bridge.McpServer)

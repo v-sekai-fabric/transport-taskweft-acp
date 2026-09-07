@@ -72,8 +72,21 @@ defmodule TaskweftAcp.Session.Store do
           reason
         )
 
+      # The hosted door stays up with the reason on /health; a desk task stops with it.
       {:error, reason} ->
-        {:stop, {:store_unreachable, reason}}
+        if Keyword.get(opts, :on_unreachable, :stop) == :degrade do
+          {:ok,
+           %{
+             adapter: primary,
+             state: nil,
+             primary: primary,
+             fallback: nil,
+             opts: adapter_opts,
+             mode: {:unreachable, reason}
+           }}
+        else
+          {:stop, {:store_unreachable, reason}}
+        end
     end
   end
 
@@ -86,6 +99,9 @@ defmodule TaskweftAcp.Session.Store do
   def handle_call({:append, id, event}, _from, s), do: run(s, &s.adapter.append(&1, id, event))
   def handle_call({:events, id, from}, _from, s), do: run(s, &s.adapter.events(&1, id, from))
   def handle_call({:sessions, cwd}, _from, s), do: run(s, &s.adapter.sessions(&1, cwd))
+
+  defp run(%{mode: {:unreachable, reason}} = s, _fun),
+    do: {:reply, {:error, {:unreachable, reason}}, s}
 
   defp run(s, fun) do
     case fun.(s.state) do
