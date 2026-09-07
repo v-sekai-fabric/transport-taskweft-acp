@@ -80,6 +80,10 @@ The hosted door builds from the same tree with `flyctl deploy --remote-only`; th
 context must carry `thirdparty/store` (the goal manifest's linkfiles) because the
 Containerfile compiles the helper in fabric mode. `TASKWEFT_ACP_STORE_FALLBACK=bao` makes
 OpenBao's sqlite-fdb engine the fallback writer, reached through `priv/bao/catalog.hcl`.
+The cluster credentials arrive as the four base64 secrets RFD 2134 gives a client
+(`FDB_TLS_CERT_B64`, `FDB_TLS_KEY_B64`, `FDB_TLS_CA_B64`, `WEFT_FDB_CLUSTER_B64`), which the
+release writes to files at boot; `scripts/issue_cluster_credentials.sh` issues the
+certificate through bao's PKI with an operator token and sets them.
 
 `TASKWEFT_ACP_STORE` is `plain` (SQLite files under `.taskweft-acp/`), `fabric`
 (weft_fdb databases on the cluster) or `memory` (tests); it is never defaulted

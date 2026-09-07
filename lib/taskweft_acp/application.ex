@@ -12,6 +12,22 @@ defmodule TaskweftAcp.Application do
 
   @impl true
   def start(_type, _args) do
+    with :ok <- fabric_credentials(), do: start_children()
+  end
+
+  # A partial credential set fails the boot; none at all means plain or memory mode.
+  defp fabric_credentials do
+    case TaskweftAcp.FabricEnv.materialise() do
+      {:error, reason} ->
+        {:error, {:fabric_credentials, reason}}
+
+      state ->
+        :logger.info("fabric credentials: #{state}")
+        :ok
+    end
+  end
+
+  defp start_children do
     children =
       if Application.get_env(:taskweft_acp, :serve, false) do
         [

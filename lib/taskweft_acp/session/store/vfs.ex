@@ -10,7 +10,7 @@ defmodule TaskweftAcp.Session.Store.Vfs do
 
   @behaviour TaskweftAcp.Session.Store
 
-  defstruct port: nil, mode: :plain, dir: nil, open: MapSet.new()
+  defstruct port: nil, mode: :plain, dir: nil, prefix: "acp_", open: MapSet.new()
 
   @migrations_dir Path.join(:code.priv_dir(:taskweft_acp), "migrations")
 
@@ -23,7 +23,12 @@ defmodule TaskweftAcp.Session.Store.Vfs do
     with {:ok, exe} <- helper(Keyword.get(opts, :helper)),
          port = Port.open({:spawn_executable, exe}, [:binary, :exit_status, {:line, 1_048_576}]),
          {:ok, %{"ready" => true}} <- read(port),
-         state = %__MODULE__{port: port, mode: mode, dir: dir},
+         state = %__MODULE__{
+           port: port,
+           mode: mode,
+           dir: dir,
+           prefix: Keyword.get(opts, :prefix, "acp_")
+         },
          {:ok, state} <- open_db(state, "registry"),
          {:ok, state} <- migrate(state, "registry", "registry.sql") do
       {:ok, state}
@@ -139,8 +144,8 @@ defmodule TaskweftAcp.Session.Store.Vfs do
   defp open_db(s, name) do
     target =
       case s.mode do
-        :plain -> Path.join(s.dir, "acp_#{name}.sqlite")
-        :fabric -> "acp_#{name}"
+        :plain -> Path.join(s.dir, "#{s.prefix}#{name}.sqlite")
+        :fabric -> "#{s.prefix}#{name}"
       end
 
     case request(s.port, "O #{name} #{Base.encode64(target)}") do
