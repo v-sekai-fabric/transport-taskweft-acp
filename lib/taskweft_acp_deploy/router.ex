@@ -30,19 +30,25 @@ defmodule TaskweftAcpDeploy.Router do
     ]
   end
 
+  # Liveness for the platform's check: the release is up. Readiness is /health.
+  get "/live" do
+    send_resp(conn, 200, "ok")
+  end
+
   get "/health" do
     store =
       try do
         %{adapter: adapter, mode: mode} = Store.status()
-        %{adapter: inspect(adapter), mode: mode}
+        store_health(inspect(adapter), mode)
       catch
-        :exit, _ -> %{adapter: "none", mode: :down}
+        :exit, _ -> %{adapter: "none", mode: "down", reason: "store not running"}
       end
 
+    healthy = store.mode in ["primary", "fallback"]
     executors = TaskweftAcp.Executor.Registry.all() |> Enum.map(& &1.name)
 
     body = %{
-      status: if(store.mode == :down, do: "degraded", else: "ok"),
+      status: if(healthy, do: "ok", else: "degraded"),
       version: @version,
       store: store,
       executors: executors
@@ -50,8 +56,14 @@ defmodule TaskweftAcpDeploy.Router do
 
     conn
     |> put_resp_content_type("application/json")
-    |> send_resp(if(store.mode == :down, do: 503, else: 200), Jason.encode!(body))
+    |> send_resp(if(healthy, do: 200, else: 503), Jason.encode!(body))
   end
+
+  defp store_health(adapter, :primary), do: %{adapter: adapter, mode: "primary"}
+  defp store_health(adapter, :fallback), do: %{adapter: adapter, mode: "fallback"}
+
+  defp store_health(adapter, {:degraded, reason}),
+    do: %{adapter: adapter, mode: "degraded", reason: inspect(reason)}
 
   forward("/mcp",
     to: TaskweftAcpDeploy.Gated,

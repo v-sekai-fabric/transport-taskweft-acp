@@ -27,7 +27,7 @@ primary_region = "sjc"
     timeout = "5s"
     grace_period = "15s"
     method = "GET"
-    path = "/health"
+    path = "/live"
 
 [[vm]]
   size = "shared-cpu-1x"

@@ -14,6 +14,8 @@ defmodule TaskweftAcp.Session.Store do
 
   use GenServer
 
+  alias TaskweftAcp.Session
+
   @type event :: map()
 
   @callback open(keyword()) :: {:ok, term()} | {:error, term()}
@@ -44,67 +46,45 @@ defmodule TaskweftAcp.Session.Store do
     primary =
       Keyword.get(opts, :adapter, adapter_for(Application.get_env(:taskweft_acp, :store, :plain)))
 
-    fallback = Keyword.get(opts, :fallback, nil)
+    fallback = Keyword.get(opts, :fallback, Application.get_env(:taskweft_acp, :store_fallback))
     adapter_opts = Keyword.get(opts, :adapter_opts, [])
+
+    s = %{
+      adapter: primary,
+      state: nil,
+      primary: primary,
+      fallback: fallback,
+      opts: adapter_opts,
+      mode: :primary
+    }
 
     case primary.open(adapter_opts) do
       {:ok, state} ->
-        {:ok,
-         %{
-           adapter: primary,
-           state: state,
-           primary: primary,
-           fallback: fallback,
-           opts: adapter_opts,
-           mode: :primary
-         }}
+        {:ok, %{s | state: state}}
 
       {:error, reason} when fallback != nil ->
-        switch(
-          %{
-            adapter: primary,
-            state: nil,
-            primary: primary,
-            fallback: fallback,
-            opts: adapter_opts,
-            mode: :primary
-          },
-          reason
-        )
+        switch(s, reason, nil)
 
       # The hosted door stays up with the reason on /health; a desk task stops with it.
       {:error, reason} ->
-        if Keyword.get(opts, :on_unreachable, :stop) == :degrade do
-          {:ok,
-           %{
-             adapter: primary,
-             state: nil,
-             primary: primary,
-             fallback: nil,
-             opts: adapter_opts,
-             mode: {:unreachable, reason}
-           }}
-        else
-          {:stop, {:store_unreachable, reason}}
-        end
+        if Keyword.get(opts, :on_unreachable, :stop) == :degrade,
+          do: {:ok, %{s | mode: {:degraded, reason}}},
+          else: {:stop, {:store_unreachable, reason}}
     end
   end
 
   @impl true
   def handle_call(:status, _from, s), do: {:reply, %{adapter: s.adapter, mode: s.mode}, s}
+  def handle_call({:create, id, meta}, _from, s), do: run(s, id, :create_session, [id, meta])
+  def handle_call({:append, id, event}, _from, s), do: run(s, id, :append, [id, event])
+  def handle_call({:events, id, from}, _from, s), do: run(s, id, :events, [id, from])
+  def handle_call({:sessions, cwd}, _from, s), do: run(s, nil, :sessions, [cwd])
 
-  def handle_call({:create, id, meta}, _from, s),
-    do: run(s, &s.adapter.create_session(&1, id, meta))
+  defp run(%{mode: {:degraded, reason}} = s, _id, _op, _args),
+    do: {:reply, {:error, reason}, s}
 
-  def handle_call({:append, id, event}, _from, s), do: run(s, &s.adapter.append(&1, id, event))
-  def handle_call({:events, id, from}, _from, s), do: run(s, &s.adapter.events(&1, id, from))
-  def handle_call({:sessions, cwd}, _from, s), do: run(s, &s.adapter.sessions(&1, cwd))
-
-  defp run(%{mode: {:unreachable, reason}} = s, _fun),
-    do: {:reply, {:error, {:unreachable, reason}}, s}
-
-  defp run(s, fun) do
-    case fun.(s.state) do
+  defp run(s, id, op, args) do
+    case apply(s.adapter, op, [s.state | args]) do
       {:ok, state} ->
         {:reply, :ok, %{s | state: state}}
 
@@ -113,8 +93,8 @@ defmodule TaskweftAcp.Session.Store do
 
       {:error, {class, _} = reason}
       when class in @fallback_errors and s.fallback != nil and s.mode == :primary ->
-        case switch(s, reason) do
-          {:ok, s2} -> run(s2, fun)
+        case switch(s, reason, id) do
+          {:ok, s2} -> run(s2, id, op, args)
           {:stop, why} -> {:reply, {:error, why}, s}
         end
 
@@ -123,15 +103,29 @@ defmodule TaskweftAcp.Session.Store do
     end
   end
 
-  # The switch itself is written through the fallback first, so the log says why.
-  defp switch(s, reason) do
-    case s.fallback.open(s.opts) do
-      {:ok, state} ->
-        {:ok, %{s | adapter: s.fallback, state: state, mode: :fallback}}
-        |> tap(fn _ -> :logger.warning("store fallback: #{inspect(reason)}") end)
+  # The switch is written through the fallback first, so the session's log says why.
+  defp switch(s, reason, id) do
+    with {:ok, state} <- s.fallback.open(s.opts),
+         {:ok, state} <- note_switch(s.fallback, state, id, reason) do
+      :logger.warning("store fallback: #{inspect(reason)}")
+      {:ok, %{s | adapter: s.fallback, state: state, mode: :fallback}}
+    else
+      {:error, why} -> {:stop, {:store_unreachable, {reason, why}}}
+    end
+  end
 
-      {:error, why} ->
-        {:stop, {:store_unreachable, {reason, why}}}
+  defp note_switch(_adapter, state, nil, _reason), do: {:ok, state}
+
+  defp note_switch(adapter, state, id, reason) do
+    event =
+      Session.event(:agent_to_client, "acp/fallback", %{
+        "active" => adapter |> Module.split() |> List.last() |> String.downcase(),
+        "reason" => inspect(reason)
+      })
+
+    case adapter.append(state, id, event) do
+      {:ok, _ordinal, state} -> {:ok, state}
+      {:error, _} = error -> error
     end
   end
 

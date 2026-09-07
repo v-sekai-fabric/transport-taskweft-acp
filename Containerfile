@@ -37,7 +37,7 @@ COPY Makefile ./
 # fabric-store's VFS arrives through the goal manifest's linkfile; the build context
 # must carry thirdparty/store/{fdb_vfs.c,fdb_keys.h}.
 COPY thirdparty thirdparty
-RUN make WEFT_FABRIC=1
+RUN make WEFT_FABRIC=1 > /tmp/weft_sql.log 2>&1 || { grep -E "error|Error" /tmp/weft_sql.log; exit 1; }
 RUN mix compile
 RUN mix release taskweft_acp_deploy
 

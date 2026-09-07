@@ -29,7 +29,7 @@ defmodule TaskweftAcp.Bridge.McpServer do
     )
 
     handle(fn args, _state ->
-      case Bridge.new_session(args["cwd"], executor: args["executor"]) do
+      case Bridge.new_session(Bridge, args["cwd"], executor: args["executor"]) do
         {:ok, id} -> {:ok, json(%{session_id: id, cwd: args["cwd"], executor: args["executor"]})}
         {:error, reason} -> {:ok, error(inspect(reason))}
       end

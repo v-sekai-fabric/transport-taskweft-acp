@@ -88,4 +88,52 @@ defmodule TaskweftAcp.StoreVfsTest do
                adapter_opts: [mode: :plain, dir: System.tmp_dir!(), helper: "does-not-exist"]
              )
   end
+
+  test "an unreachable primary degrades when asked, and every call names the reason" do
+    {:ok, store} =
+      Store.start_link(
+        name: nil,
+        adapter: Store.Vfs,
+        adapter_opts: [mode: :plain, dir: System.tmp_dir!(), helper: "does-not-exist"],
+        on_unreachable: :degrade
+      )
+
+    assert %{mode: {:degraded, {:unreachable, {:no_helper, _}}}} = Store.status(store)
+    assert {:error, {:unreachable, {:no_helper, _}}} = Store.sessions(store, :all)
+    assert {:error, {:unreachable, _}} = Store.create_session(store, "acp_d", %{"cwd" => "C:/w"})
+  end
+
+  test "an unreachable primary switches to a configured fallback at boot" do
+    {:ok, store} =
+      Store.start_link(
+        name: nil,
+        adapter: Store.Vfs,
+        fallback: Store.Memory,
+        adapter_opts: [mode: :plain, dir: System.tmp_dir!(), helper: "does-not-exist"]
+      )
+
+    assert %{adapter: Store.Memory, mode: :fallback} = Store.status(store)
+    assert :ok = Store.create_session(store, "acp_f", %{"cwd" => "C:/w"})
+
+    assert {:ok, 1} =
+             Store.append(store, "acp_f", Session.event(:client_to_agent, "session/new", %{}))
+  end
+
+  test "a SQL error does not switch to a configured fallback" do
+    dir =
+      Path.join(System.tmp_dir!(), "taskweft_acp_store_ctl_#{System.unique_integer([:positive])}")
+
+    on_exit(fn -> File.rm_rf(dir) end)
+
+    {:ok, store} =
+      Store.start_link(
+        name: nil,
+        adapter: Store.Vfs,
+        fallback: Store.Memory,
+        adapter_opts: [mode: :plain, dir: dir]
+      )
+
+    assert {:error, {:sql, _}} = Store.events(store, "../not-a-name", 0)
+    assert %{adapter: Store.Vfs, mode: :primary} = Store.status(store)
+  end
 end

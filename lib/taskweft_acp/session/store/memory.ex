@@ -7,7 +7,7 @@ defmodule TaskweftAcp.Session.Store.Memory do
   @behaviour TaskweftAcp.Session.Store
 
   @impl true
-  def open(_opts), do: {:ok, %{sessions: %{}, events: %{}, fail: nil}}
+  def open(opts), do: {:ok, %{sessions: %{}, events: %{}, fail: Keyword.get(opts, :fail)}}
 
   @impl true
   def create_session(%{fail: {:create, reason}} = s, _id, _meta),

@@ -16,6 +16,7 @@ defmodule TaskweftAcp.MixProject do
       dialyzer: [
         plt_add_apps: [:mix, :ex_unit],
         plt_file: {:no_warn, "priv/plts/taskweft_acp.plt"},
+        ignore_warnings: ".dialyzer_ignore.exs",
         flags: [:error_handling, :underspecs, :unmatched_returns]
       ]
     ]

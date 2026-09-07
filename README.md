@@ -64,11 +64,22 @@ performs each step it asks for and reports the exit code back.
 
 ## Building
 
-    mix deps.get && mix compile          # under vcvars64 on Windows: taskweft's NIF uses nmake
+    mix deps.get && mix compile          # taskweft's NIF: clang++ through llvm-mingw on Windows, gcc in CI
     make                                 # the store helper, plain mode (libsqlite3-dev)
     make WEFT_FABRIC=1                   # with fabric-store's weft_fdb VFS and libfdb_c
-    pixi run weft-sql-win                # the helper on Windows through the pixi SQLite
+    pixi run weft-sql-win                # the helper on Windows: clang against the pixi SQLite
     mix test && mix dialyzer
+
+A Windows desk builds with llvm-mingw, never Visual Studio: the toolchain unpacked under
+`%USERPROFILE%/llvm-mingw`, `clang`, `clang++` and a `mingw32-make` shim on `PATH`, and
+`CC=clang CXX=clang++` in the environment. The two launchers under `scripts/` set exactly
+that before running `mix`, so the editor and Claude Code entries above carry no
+environment of their own.
+
+The hosted door builds from the same tree with `flyctl deploy --remote-only`; the build
+context must carry `thirdparty/store` (the goal manifest's linkfiles) because the
+Containerfile compiles the helper in fabric mode. `TASKWEFT_ACP_STORE_FALLBACK=bao` makes
+OpenBao's sqlite-fdb engine the fallback writer, reached through `priv/bao/catalog.hcl`.
 
 `TASKWEFT_ACP_STORE` is `plain` (SQLite files under `.taskweft-acp/`), `fabric`
 (weft_fdb databases on the cluster) or `memory` (tests); it is never defaulted

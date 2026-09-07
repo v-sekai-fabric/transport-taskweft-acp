@@ -4,10 +4,10 @@ channels = ["conda-forge"]
 platforms = ["win-64", "linux-64", "osx-arm64"]
 
 # The store helper's build inputs on a desk: SQLite headers and import library. Elixir,
-# Erlang and the C compiler come from the desk (scoop, Visual Studio); CI uses apt.
+# Erlang and the C compiler come from the desk (scoop, llvm-mingw); CI uses apt.
 [dependencies]
 libsqlite = ">=3.45"
 
 [tasks]
-weft-sql-win = { cmd = "nmake /F Makefile.win SQLITE_INC=%CONDA_PREFIX%\\Library\\include SQLITE_LIB=%CONDA_PREFIX%\\Library\\lib" }
-weft-sql = { cmd = "make SQLITE_CFLAGS=-I$CONDA_PREFIX/include SQLITE_LIBS='-L$CONDA_PREFIX/lib -lsqlite3'" }
+weft-sql-win = { cmd = 'make CC=clang SQLITE_CFLAGS=-I$CONDA_PREFIX/Library/include SQLITE_LIBS="-L$CONDA_PREFIX/Library/lib -lsqlite3" TARGET=priv/weft_sql.exe && cp $CONDA_PREFIX/Library/bin/sqlite3.dll priv/' }
+weft-sql = { cmd = 'make SQLITE_CFLAGS=-I$CONDA_PREFIX/include SQLITE_LIBS="-L$CONDA_PREFIX/lib -lsqlite3"' }

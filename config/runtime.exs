@@ -13,5 +13,12 @@ case System.get_env("TASKWEFT_ACP_STORE") do
   other -> raise "TASKWEFT_ACP_STORE=#{other}: expected plain, fabric or memory"
 end
 
+# The fallback is chosen explicitly too: bao (OpenBao's sqlite-fdb engine) or unset.
+case System.get_env("TASKWEFT_ACP_STORE_FALLBACK") do
+  nil -> :ok
+  "bao" -> config(:taskweft_acp, store_fallback: TaskweftAcp.Session.Store.Bao)
+  other -> raise "TASKWEFT_ACP_STORE_FALLBACK=#{other}: expected bao or unset"
+end
+
 if port = System.get_env("PORT"), do: config(:taskweft_acp, port: String.to_integer(port))
 if System.get_env("TASKWEFT_ACP_SERVE") == "1", do: config(:taskweft_acp, serve: true)

@@ -9,7 +9,7 @@ TARGET = $(PRIV_DIR)/weft_sql
 
 ifeq ($(WEFT_FABRIC),1)
   FABRIC_SRC = thirdparty/store/fdb_vfs.c
-  FABRIC_CFLAGS = -DWEFT_FABRIC -Ithirdparty/store -I/usr/include/foundationdb
+  FABRIC_CFLAGS = -DWEFT_FABRIC -DFDB_API_VERSION=730 -Ithirdparty/store -I/usr/include/foundationdb
   FABRIC_LIBS = -lfdb_c -lpthread
 else
   FABRIC_SRC =

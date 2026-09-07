@@ -20,7 +20,8 @@ defmodule TaskweftAcp.Bridge do
   def start_link(opts \\ []),
     do: GenServer.start_link(__MODULE__, opts, name: Keyword.get(opts, :name, __MODULE__))
 
-  @spec new_session(GenServer.server(), String.t()) :: {:ok, String.t()} | {:error, term()}
+  @spec new_session(GenServer.server(), String.t(), keyword()) ::
+          {:ok, String.t()} | {:error, term()}
   def new_session(bridge \\ __MODULE__, cwd, opts \\ []),
     do: GenServer.call(bridge, {:new_session, cwd, opts}, 60_000)
 
