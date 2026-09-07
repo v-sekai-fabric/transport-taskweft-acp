@@ -152,7 +152,8 @@ defmodule TaskweftAcp.Executor do
   defp ask_editor(agent, "fs/read_text_file", p) do
     case Acp.read_text_file(agent, p["sessionId"], p["path"]) do
       {:ok, %{"content" => content}} -> {:ok, %{"content" => content}}
-      {:ok, content} when is_binary(content) -> {:ok, %{"content" => content}}
+      {:ok, nil} -> {:error, "empty response"}
+      {:ok, other} -> {:ok, %{"content" => other}}
       {:error, reason} -> {:error, reason}
     end
   end
