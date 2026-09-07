@@ -4,12 +4,16 @@
 defmodule Mix.Tasks.TaskweftAcp.Executor do
   @shortdoc "Dial in to the hosted door as an executor side"
   @moduledoc """
-      mix taskweft_acp.executor --remote wss://HOST/executor --name magi [--label gpu:4090] [--cwd DIR]
+      mix taskweft_acp.executor --remote wss://HOST/executor --name magi [--label gpu:4090] [--cwd DIR] [--editor]
 
   The bearer is the executor's own OpenBao token: `TASKWEFT_ACP_TOKEN` or `BAO_TOKEN` in
   the environment (`bao login -no-store -token-only`). The permission policy is the
   `taskweft_acp_policy` field of `agents/<cn>` in bao when `--cn` is given, overridden
   by `.taskweft-acp/policy.exs` under the working directory.
+
+  With `--editor` the process is also an ACP agent on stdio: register it in the editor
+  instead of `mix taskweft_acp.agent`, and the hosted door's prompts, diffs, terminals
+  and permission dialogs render there for a human to answer.
   """
   use Mix.Task
 
@@ -17,7 +21,14 @@ defmodule Mix.Tasks.TaskweftAcp.Executor do
   def run(args) do
     {opts, _, _} =
       OptionParser.parse(args,
-        strict: [remote: :string, name: :string, label: :keep, cwd: :string, cn: :string]
+        strict: [
+          remote: :string,
+          name: :string,
+          label: :keep,
+          cwd: :string,
+          cn: :string,
+          editor: :boolean
+        ]
       )
 
     remote = opts[:remote] || Mix.raise("--remote wss://HOST/executor is required")
@@ -51,10 +62,18 @@ defmodule Mix.Tasks.TaskweftAcp.Executor do
         name: name,
         labels: labels,
         cwd: cwd,
-        bao_policy: bao_policy
+        bao_policy: bao_policy,
+        editor: opts[:editor] || false
       )
 
-    Mix.shell().info("executor #{name} serving #{cwd} for #{remote}")
+    if opts[:editor] do
+      Application.put_env(:ex_mcp, :stdio_mode, true)
+      Logger.configure(level: :emergency)
+      _ = :logger.set_primary_config(:level, :emergency)
+    else
+      Mix.shell().info("executor #{name} serving #{cwd} for #{remote}")
+    end
+
     Process.sleep(:infinity)
   end
 end

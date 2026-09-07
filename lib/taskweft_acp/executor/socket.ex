@@ -6,6 +6,11 @@ defmodule TaskweftAcp.Executor.Socket do
   The executor's end of the `/executor` WebSocket: an outbound Mint connection that
   registers the executor, answers every server request through `handler.(method,
   params)`, and reconnects with backoff when the hosted side goes away.
+
+  The socket carries both directions. A server request arrives as `{"id", "method",
+  "params"}` and is answered `{"id", "result" | "error"}`; a request this side makes
+  (relay editor mode) goes out as `{"rid", "method", "params"}` and comes back
+  `{"rid", "result" | "error"}`. The two key names keep the numbering spaces apart.
   """
 
   use GenServer
@@ -21,11 +26,20 @@ defmodule TaskweftAcp.Executor.Socket do
     :websocket,
     :ref,
     :backoff,
+    :updates,
+    pending: %{},
+    next_rid: 1,
     status: :connecting
   ]
 
   def start_link(opts),
     do: GenServer.start_link(__MODULE__, opts, name: Keyword.get(opts, :name_proc))
+
+  @doc "Ask the hosted door to do something; blocks the caller until it answers."
+  @spec request(GenServer.server(), String.t(), map(), timeout()) ::
+          {:ok, term()} | {:error, term()}
+  def request(socket, method, params, timeout \\ 300_000),
+    do: GenServer.call(socket, {:request, method, params}, timeout)
 
   @impl true
   def init(opts) do
@@ -35,6 +49,7 @@ defmodule TaskweftAcp.Executor.Socket do
       name: Keyword.fetch!(opts, :name),
       labels: Keyword.get(opts, :labels, []),
       handler: Keyword.fetch!(opts, :handler),
+      updates: Keyword.get(opts, :updates),
       backoff: 1_000
     }
 
@@ -56,6 +71,22 @@ defmodule TaskweftAcp.Executor.Socket do
         Process.send_after(self(), :reconnect, state.backoff)
         {:noreply, %{state | status: :connecting, backoff: min(state.backoff * 2, 30_000)}}
     end
+  end
+
+  @impl true
+  def handle_call({:request, _method, _params}, _from, %{websocket: nil} = state),
+    do: {:reply, {:error, :not_connected}, state}
+
+  def handle_call({:request, method, params}, from, state) do
+    rid = state.next_rid
+    frame = {:text, Jason.encode!(%{rid: rid, method: method, params: params})}
+
+    {:noreply,
+     %{
+       send_frame(state, frame)
+       | pending: Map.put(state.pending, rid, from),
+         next_rid: rid + 1
+     }}
   end
 
   @impl true
@@ -108,6 +139,13 @@ defmodule TaskweftAcp.Executor.Socket do
 
         send_frame(state, {:text, Jason.encode!(reply)})
 
+      {:ok, %{"rid" => rid} = reply} ->
+        answer(state, rid, reply)
+
+      {:ok, %{"event" => "session/update", "params" => params}} ->
+        if state.updates, do: state.updates.(params)
+        state
+
       {:ok, %{"event" => event}} ->
         Logger.debug("executor #{state.name}: #{event}")
         state
@@ -119,10 +157,26 @@ defmodule TaskweftAcp.Executor.Socket do
 
   defp handle_frame({:close, _code, _reason}, state) do
     Process.send_after(self(), :reconnect, state.backoff)
-    %{state | conn: nil, websocket: nil, status: :connecting}
+    for {_rid, from} <- state.pending, do: GenServer.reply(from, {:error, :disconnected})
+    %{state | conn: nil, websocket: nil, pending: %{}, status: :connecting}
   end
 
   defp handle_frame(_other, state), do: state
+
+  defp answer(state, rid, reply) do
+    case Map.pop(state.pending, rid) do
+      {nil, pending} ->
+        %{state | pending: pending}
+
+      {from, pending} ->
+        GenServer.reply(from, reply_of(reply))
+        %{state | pending: pending}
+    end
+  end
+
+  defp reply_of(%{"error" => error}), do: {:error, error}
+  defp reply_of(%{"result" => result}), do: {:ok, result}
+  defp reply_of(other), do: {:error, {:unreadable_reply, other}}
 
   defp send_frame(state, frame) do
     with {:ok, websocket, data} <- Mint.WebSocket.encode(state.websocket, frame),

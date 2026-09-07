@@ -7,15 +7,20 @@ defmodule TaskweftAcp.Executor do
   the client-side requests of the sessions bound to it. Files and terminals run here;
   permissions are decided here from the OpenBao policy with the local override; the
   hosted side records what was decided and never decides it.
+
+  In relay mode (`editor: true`) the same process is also an ACP agent toward an editor
+  over stdio: prompts go up to the hosted door, and every request the door makes for a
+  relayed session is put to the human in the editor instead of to the policy.
   """
 
   use GenServer
   require Logger
 
+  alias ExMCP.ACP.Agent, as: Acp
   alias TaskweftAcp.Bridge.ClientHandler
   alias TaskweftAcp.Executor.{Policy, Socket}
 
-  defstruct [:cwd, :policy, :handler_state, :socket, :name]
+  defstruct [:cwd, :policy, :handler_state, :socket, :name, :agent, editor: false]
 
   def start_link(opts),
     do: GenServer.start_link(__MODULE__, opts, name: Keyword.get(opts, :name_proc, __MODULE__))
@@ -25,6 +30,7 @@ defmodule TaskweftAcp.Executor do
     cwd = Keyword.get(opts, :cwd, File.cwd!())
     policy = Policy.load(cwd, bao: Keyword.get(opts, :bao_policy, %{}))
     {:ok, handler_state} = ClientHandler.init(policy: %{}, bridge: nil)
+    editor = Keyword.get(opts, :editor, false)
     me = self()
 
     {:ok, socket} =
@@ -33,20 +39,64 @@ defmodule TaskweftAcp.Executor do
         token: Keyword.fetch!(opts, :token),
         name: Keyword.fetch!(opts, :name),
         labels: Keyword.get(opts, :labels, []),
-        handler: fn method, params -> GenServer.call(me, {:serve, method, params}, :infinity) end
+        handler: fn method, params -> GenServer.call(me, {:serve, method, params}, :infinity) end,
+        updates: if(editor, do: fn params -> send(me, {:update, params}) end)
       )
 
-    {:ok,
-     %__MODULE__{
-       cwd: cwd,
-       policy: policy,
-       handler_state: handler_state,
-       socket: socket,
-       name: Keyword.fetch!(opts, :name)
-     }}
+    state = %__MODULE__{
+      cwd: cwd,
+      policy: policy,
+      handler_state: handler_state,
+      socket: socket,
+      name: Keyword.fetch!(opts, :name),
+      editor: editor
+    }
+
+    if editor,
+      do: {:ok, state, {:continue, {:editor, Keyword.get(opts, :agent_opts, [])}}},
+      else: {:ok, state}
+  end
+
+  @doc "The socket this executor dials with, so the editor's agent can send through it."
+  @spec socket(GenServer.server()) :: pid()
+  def socket(executor \\ __MODULE__), do: GenServer.call(executor, :socket)
+
+  @impl true
+  def handle_continue({:editor, agent_opts}, s) do
+    opts =
+      Keyword.merge(
+        [
+          handler: TaskweftAcp.Executor.Relay,
+          handler_opts: [socket: s.socket],
+          agent_info: TaskweftAcp.agent_info(),
+          transport: :stdio
+        ],
+        agent_opts
+      )
+
+    {:ok, agent} = ExMCP.ACP.start_agent(opts)
+    {:noreply, %{s | agent: agent}}
   end
 
   @impl true
+  def handle_info({:update, params}, %{agent: agent} = s) when agent != nil do
+    _ =
+      ExMCP.ACP.Agent.session_update(agent, params["sessionId"], params["update"] || params)
+
+    {:noreply, s}
+  end
+
+  def handle_info(_other, s), do: {:noreply, s}
+
+  @impl true
+  def handle_call(:socket, _from, s), do: {:reply, s.socket, s}
+
+  # Relay mode: the human in the editor answers, so the policy is not consulted at all.
+  def handle_call({:serve, method, params}, _from, %{editor: true, agent: agent} = s)
+      when agent != nil do
+    {:reply, ask_editor(agent, method, params), s}
+  end
+
   def handle_call({:serve, "session/request_permission", params}, _from, s) do
     action = params["toolCall"]["title"] |> to_string() |> String.split(":") |> hd()
     answer = Policy.decide(s.policy, action)
@@ -91,4 +141,44 @@ defmodule TaskweftAcp.Executor do
 
   def handle_call({:serve, method, _params}, _from, s),
     do: {:reply, {:error, "unsupported #{method}"}, s}
+
+  defp ask_editor(agent, "session/request_permission", p) do
+    case Acp.request_permission(agent, p["sessionId"], p["toolCall"], p["options"] || []) do
+      {:ok, outcome} -> {:ok, %{"outcome" => outcome}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp ask_editor(agent, "fs/read_text_file", p) do
+    case Acp.read_text_file(agent, p["sessionId"], p["path"]) do
+      {:ok, %{"content" => content}} -> {:ok, %{"content" => content}}
+      {:ok, content} when is_binary(content) -> {:ok, %{"content" => content}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp ask_editor(agent, "fs/write_text_file", p) do
+    case Acp.write_text_file(agent, p["sessionId"], p["path"], p["content"]) do
+      {:ok, _} -> {:ok, %{}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp ask_editor(agent, "terminal/create", p) do
+    Acp.terminal_create(agent, p["sessionId"], Map.drop(p, ["sessionId"]))
+  end
+
+  defp ask_editor(agent, "terminal/output", p),
+    do: Acp.terminal_output(agent, p["sessionId"], p["terminalId"])
+
+  defp ask_editor(agent, "terminal/wait_for_exit", p),
+    do: Acp.terminal_wait_for_exit(agent, p["sessionId"], p["terminalId"])
+
+  defp ask_editor(agent, "terminal/kill", p),
+    do: Acp.terminal_kill(agent, p["sessionId"], p["terminalId"])
+
+  defp ask_editor(agent, "terminal/release", p),
+    do: Acp.terminal_release(agent, p["sessionId"], p["terminalId"])
+
+  defp ask_editor(_agent, method, _p), do: {:error, "unsupported #{method}"}
 end

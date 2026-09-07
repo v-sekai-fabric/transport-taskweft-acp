@@ -11,6 +11,11 @@ defmodule TaskweftAcp.Transport.WebSocket do
   Frames are JSON lines: server → executor `{"id", "method", "params"}`, executor →
   server `{"id", "result"}` or `{"id", "error"}`; the executor may also send
   `{"event": "ping"}`.
+
+  Relay editor mode reverses one direction on the same socket. The executor sends
+  `{"rid", "method", "params"}` to open a session or run a prompt on behalf of the
+  editor a human is watching, and this side answers `{"rid", "result" | "error"}`;
+  session updates for a relayed session go down as `{"event": "session/update"}`.
   """
 
   @behaviour :cowboy_websocket
@@ -20,6 +25,13 @@ defmodule TaskweftAcp.Transport.WebSocket do
 
   @policy "taskweft-acp-executor"
   @request_timeout 30_000
+
+  @doc "Send one session update down to a relaying executor."
+  @spec update(pid(), map()) :: :ok
+  def update(pid, params) do
+    send(pid, {:session_update, params})
+    :ok
+  end
 
   @doc "Ask the executor behind `pid` to perform `method`; blocks the caller."
   @spec request(pid(), String.t(), map(), timeout()) :: {:ok, term()} | {:error, term()}
@@ -70,16 +82,39 @@ defmodule TaskweftAcp.Transport.WebSocket do
   @impl :cowboy_websocket
   def websocket_handle({:text, frame}, state) do
     case Jason.decode(frame) do
-      {:ok, %{"id" => id, "result" => result}} -> {[], answer(state, id, {:ok, result})}
-      {:ok, %{"id" => id, "error" => error}} -> {[], answer(state, id, {:error, error})}
-      {:ok, %{"event" => "ping"}} -> {[{:text, ~s({"event":"pong"})}], state}
-      _ -> {[{:text, ~s({"error":"unreadable frame"})}], state}
+      {:ok, %{"id" => id, "result" => result}} ->
+        {[], answer(state, id, {:ok, result})}
+
+      {:ok, %{"id" => id, "error" => error}} ->
+        {[], answer(state, id, {:error, error})}
+
+      {:ok, %{"rid" => rid, "method" => method} = frame} ->
+        relay(state, rid, method, frame["params"] || %{})
+
+      {:ok, %{"event" => "ping"}} ->
+        {[{:text, ~s({"event":"pong"})}], state}
+
+      _ ->
+        {[{:text, ~s({"error":"unreadable frame"})}], state}
     end
   end
 
   def websocket_handle(_other, state), do: {[], state}
 
   @impl :cowboy_websocket
+  def websocket_info({:relay_reply, rid, reply}, state) do
+    frame =
+      case reply do
+        {:ok, result} -> %{rid: rid, result: result}
+        {:error, reason} -> %{rid: rid, error: inspect(reason)}
+      end
+
+    {[{:text, Jason.encode!(frame)}], state}
+  end
+
+  def websocket_info({:session_update, params}, state),
+    do: {[{:text, Jason.encode!(%{event: "session/update", params: params})}], state}
+
   def websocket_info({:request, from, method, params}, state) do
     id = state.next
     frame = Jason.encode!(%{id: id, method: method, params: params})
@@ -95,6 +130,51 @@ defmodule TaskweftAcp.Transport.WebSocket do
   end
 
   def terminate(_reason, _req, _state), do: :ok
+
+  # A relayed call can run for the length of a prompt, so it must not block the socket.
+  defp relay(state, rid, method, params) do
+    socket = self()
+    name = state.name
+
+    {:ok, _} =
+      Task.start(fn -> send(socket, {:relay_reply, rid, serve_relay(name, method, params)}) end)
+
+    {[], state}
+  end
+
+  @doc false
+  @spec serve_relay(String.t(), String.t(), map()) :: {:ok, term()} | {:error, term()}
+  def serve_relay(name, "session/new", params) do
+    case TaskweftAcp.Bridge.new_session(TaskweftAcp.Bridge, params["cwd"], executor: name) do
+      {:ok, id} -> {:ok, %{"sessionId" => id}}
+      {:error, _} = e -> e
+    end
+  end
+
+  def serve_relay(_name, "session/prompt", params) do
+    TaskweftAcp.Bridge.prompt(TaskweftAcp.Bridge, params["sessionId"], params["text"])
+  end
+
+  def serve_relay(_name, "session/list", _params) do
+    case TaskweftAcp.Bridge.sessions(TaskweftAcp.Bridge) do
+      {:ok, rows} -> {:ok, %{"sessions" => rows}}
+      {:error, _} = e -> e
+    end
+  end
+
+  def serve_relay(_name, "session/cancel", params) do
+    :ok = TaskweftAcp.Bridge.cancel(TaskweftAcp.Bridge, params["sessionId"])
+    {:ok, %{}}
+  end
+
+  def serve_relay(_name, "session/close", params) do
+    case TaskweftAcp.Bridge.close(TaskweftAcp.Bridge, params["sessionId"]) do
+      :ok -> {:ok, %{}}
+      {:error, _} = e -> e
+    end
+  end
+
+  def serve_relay(_name, method, _params), do: {:error, "unsupported #{method}"}
 
   defp answer(state, id, reply) do
     case Map.pop(state.pending, id) do

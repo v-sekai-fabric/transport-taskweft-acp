@@ -21,11 +21,20 @@ defmodule TaskweftAcp.Bridge.ClientHandler do
      }}
   end
 
-  @impl true
-  def handle_session_update(_session_id, _update, state), do: {:ok, state}
-
   alias TaskweftAcp.Executor.Registry
   alias TaskweftAcp.Transport.WebSocket
+
+  # A relaying executor renders the run in its editor, so updates for a bound session
+  # go down the same socket its requests come up.
+  @impl true
+  def handle_session_update(session_id, update, state) do
+    case remote(session_id) do
+      {:ok, pid} -> WebSocket.update(pid, %{"sessionId" => session_id, "update" => update})
+      :local -> :ok
+    end
+
+    {:ok, state}
+  end
 
   @impl true
   def handle_permission_request(session_id, tool_call, options, state) do
