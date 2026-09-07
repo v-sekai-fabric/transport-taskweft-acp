@@ -58,7 +58,7 @@ defmodule TaskweftAcp.Session.Store do
       mode: :primary
     }
 
-    case safe_open(primary, adapter_opts) do
+    case primary.open(adapter_opts) do
       {:ok, state} ->
         {:ok, %{s | state: state}}
 
@@ -105,7 +105,7 @@ defmodule TaskweftAcp.Session.Store do
 
   # The switch is written through the fallback first, so the session's log says why.
   defp switch(s, reason, id) do
-    with {:ok, state} <- safe_open(s.fallback, s.opts),
+    with {:ok, state} <- s.fallback.open(s.opts),
          {:ok, state} <- note_switch(s.fallback, state, id, reason) do
       :logger.warning("store fallback: #{inspect(reason)}")
       {:ok, %{s | adapter: s.fallback, state: state, mode: :fallback}}
@@ -127,12 +127,6 @@ defmodule TaskweftAcp.Session.Store do
       {:ok, _ordinal, state} -> {:ok, state}
       {:error, _} = error -> error
     end
-  end
-
-  defp safe_open(adapter, opts) do
-    adapter.open(opts)
-  rescue
-    e -> {:error, {:unreachable, {:exception, Exception.message(e)}}}
   end
 
   defp adapter_for(:memory), do: TaskweftAcp.Session.Store.Memory
