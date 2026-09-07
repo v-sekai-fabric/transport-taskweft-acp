@@ -237,9 +237,10 @@ defmodule TaskweftAcp.AgentTest do
                     }},
                    5_000
 
-    assert script =~ "#!/bin/sh"
-    assert script =~ "mix compile --warnings-as-errors"
-    assert script =~ "mix test"
+    assert script =~ "SafeGDScript"
+    assert script =~ ~s("args": ["compile", "--warnings-as-errors"])
+    assert script =~ ~s("action": "run_tests")
+    assert script =~ ~s("status": "completed")
   end
 
   # Agent messages arrive in order; skip the earlier ones until the wanted text appears.

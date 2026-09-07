@@ -1,0 +1,38 @@
+name: Deploy
+
+# The hosted door redeploys when the app or its build recipe changes. FLY_API_TOKEN
+# is a repository secret; without it the job fails, which is the honest state.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "lib/**"
+      - "config/**"
+      - "priv/**"
+      - "c_src/**"
+      - "Makefile"
+      - "mix.exs"
+      - "mix.lock"
+      - "Containerfile"
+      - "fly.toml"
+  workflow_dispatch:
+
+concurrency:
+  group: fly-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      # fabric-store's VFS sources for the fabric build of the store helper.
+      - uses: actions/checkout@v4
+        with:
+          repository: v-sekai-fabric/datasource-store
+          path: thirdparty/store
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - run: flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

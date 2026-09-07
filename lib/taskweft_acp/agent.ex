@@ -188,8 +188,8 @@ defmodule TaskweftAcp.Agent do
   end
 
   defp dispatch(%{kind: :export}, session, ctx, st) do
-    script = TaskweftAcp.Export.script(session)
-    path = Path.join(TaskweftAcp.workspace_dir(session.cwd), "#{session.id}.sh")
+    script = TaskweftAcp.Export.sgd(session)
+    path = Path.join(TaskweftAcp.workspace_dir(session.cwd), "#{session.id}.sgd")
     ectx = %{agent: ctx.agent, session_id: session.id, cwd: session.cwd}
     id = "export-#{session.prompt_ordinal}"
 

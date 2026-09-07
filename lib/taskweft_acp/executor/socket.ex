@@ -142,7 +142,9 @@ defmodule TaskweftAcp.Executor.Socket do
     query = URI.encode_query(%{"name" => state.name, "labels" => Enum.join(state.labels, ",")})
     path = (uri.path || "/executor") <> "?" <> query
 
-    with {:ok, conn} <- Mint.HTTP.connect(scheme, uri.host, uri.port, protocols: [:http1]),
+    port = uri.port || if(scheme == :https, do: 443, else: 80)
+
+    with {:ok, conn} <- Mint.HTTP.connect(scheme, uri.host, port, protocols: [:http1]),
          {:ok, conn, ref} <-
            Mint.WebSocket.upgrade(ws_scheme, conn, path, [
              {"authorization", "Bearer " <> state.token}

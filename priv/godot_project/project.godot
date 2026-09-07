@@ -1,0 +1,21 @@
+; Engine configuration file.
+; The host project for taskweft-acp exports: a Sandbox node loads the exported
+; SafeGDScript program and taskweft_host.gd performs each step the guest asks for.
+; The godot-sandbox addon (libriscv) is expected under addons/godot_sandbox, placed
+; by the goal manifest's linkfile from the workspace's pinned copy.
+
+config_version=5
+
+[application]
+
+config/name="taskweft-acp host"
+run/main_scene="res://main.tscn"
+config/features=PackedStringArray("4.7")
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/godot_sandbox/plugin.cfg")
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
