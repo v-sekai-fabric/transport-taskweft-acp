@@ -12,8 +12,6 @@ defmodule TaskweftAcp.Session.Store.Vfs do
 
   defstruct port: nil, mode: :plain, dir: nil, prefix: "acp_", open: MapSet.new()
 
-  @migrations_dir Path.join(:code.priv_dir(:taskweft_acp), "migrations")
-
   @impl true
   def open(opts) do
     mode = Keyword.get(opts, :mode, Application.get_env(:taskweft_acp, :store, :plain))
@@ -156,7 +154,7 @@ defmodule TaskweftAcp.Session.Store.Vfs do
   end
 
   defp migrate(s, name, file) do
-    Path.join(@migrations_dir, file)
+    Path.join(migrations_dir(), file)
     |> File.read!()
     |> String.split(";")
     |> Enum.map(&String.trim/1)
@@ -227,6 +225,8 @@ defmodule TaskweftAcp.Session.Store.Vfs do
 
     if File.exists?(exe), do: {:ok, exe}, else: {:error, {:no_helper, exe}}
   end
+
+  defp migrations_dir, do: Path.join(:code.priv_dir(:taskweft_acp), "migrations")
 
   defp default_dir do
     Path.join(File.cwd!(), Application.get_env(:taskweft_acp, :store_dir, ".taskweft-acp"))
