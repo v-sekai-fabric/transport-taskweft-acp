@@ -19,11 +19,9 @@ defmodule TaskweftAcp.Domain do
         }
   @type t :: %__MODULE__{source: String.t(), json: String.t(), exec: %{String.t() => exec}}
 
-  @builtin Path.join(:code.priv_dir(:taskweft_acp), "domains/repo_chores.ex")
+  def builtin_path, do: builtin_file()
 
-  def builtin_path, do: @builtin
-
-  def builtin, do: load(File.read!(@builtin), @builtin)
+  def builtin, do: load(File.read!(builtin_file()), builtin_file())
 
   @spec load(String.t(), String.t() | nil) :: {:ok, t()} | {:error, String.t()}
   def load(source, path \\ nil) do
@@ -144,4 +142,6 @@ defmodule TaskweftAcp.Domain do
   defp literal(other), do: raise(ArgumentError, "unsupported term #{Macro.to_string(other)}")
 
   defp diagnostics(reason) when is_binary(reason), do: reason
+
+  defp builtin_file, do: Path.join(:code.priv_dir(:taskweft_acp), "domains/repo_chores.ex")
 end
