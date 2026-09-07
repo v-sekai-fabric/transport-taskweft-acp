@@ -83,7 +83,16 @@ OpenBao's sqlite-fdb engine the fallback writer, reached through `priv/bao/catal
 The cluster credentials arrive as the four base64 secrets RFD 2134 gives a client
 (`FDB_TLS_CERT_B64`, `FDB_TLS_KEY_B64`, `FDB_TLS_CA_B64`, `WEFT_FDB_CLUSTER_B64`), which the
 release writes to files at boot; `scripts/issue_cluster_credentials.sh` issues the
-certificate through bao's PKI with an operator token and sets them.
+certificate through bao's PKI with an operator token and sets them. It runs from the
+operator's own shell, because the 1Password approval prompt is a state their process
+reaches, and it walks named states rather than waiting out timeouts.
+
+    mix taskweft_acp.bench --runs 5                             # on a desk
+    fly ssh console -a weftspun-taskweft-acp       -C "/app/bin/taskweft_acp_deploy rpc 'TaskweftAcp.Bench.run(5) |> IO.puts()'"
+
+reports p50 and p95 milliseconds per step for the memory floor, plain mode and, where
+the cluster is reachable, fabric mode. The fabric rows leave `bench_<stamp>_*` databases
+behind.
 
 `TASKWEFT_ACP_STORE` is `plain` (SQLite files under `.taskweft-acp/`), `fabric`
 (weft_fdb databases on the cluster) or `memory` (tests); it is never defaulted
