@@ -1,0 +1,11 @@
+# The negative control: a grammar that admits any tag soup under a <pou> root.
+# A completion sampled under it must be refused by the compiler's parser; if the
+# parser accepts what this admits, the parser is decoration (CLAUDE.md rule 2).
+
+root ::= "<pou" attrs ">" soup "</pou>" ws
+attrs ::= (" " name "=\"" [^"<>]{0,64} "\"")*
+soup ::= (tag | text | ws)*
+tag ::= "<" "/"? name attrs "/"? ">"
+text ::= [^<>]{1,120}
+name ::= [A-Za-z_] [A-Za-z0-9_]{0,63}
+ws ::= [ \t\n]+

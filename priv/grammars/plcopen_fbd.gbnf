@@ -1,0 +1,32 @@
+# The force: a llama.cpp GBNF grammar admitting only the PLCopen FBD subset that
+# taskweft-fbd-compiler's Parser.lean accepts. A completion sampled under it is
+# well-formed by construction; whether it means the right thing is the compiler's
+# and the sandbox's call. Kept strict on whitespace so the parser stays small.
+
+root ::= "<pou name=\"" name "\" pouType=\"program\">" ws interface ws body ws "</pou>" ws
+
+interface ::= "<interface>" ws "<localVars>" ws variable* "</localVars>" ws "</interface>"
+variable  ::= "<variable name=\"" name "\">" ws "<type>" ws "<" vtype "/>" ws "</type>" ws initial? "</variable>" ws
+vtype     ::= "BOOL" | "INT" | "STRING"
+initial   ::= "<initialValue>" ws "<simpleValue value=\"" literal "\"/>" ws "</initialValue>" ws
+
+body    ::= "<body>" ws "<FBD>" ws element+ "</FBD>" ws "</body>"
+element ::= inVariable | outVariable | block
+
+inVariable  ::= "<inVariable localId=\"" num "\">" ws "<expression>" literal "</expression>" ws "</inVariable>" ws
+outVariable ::= "<outVariable localId=\"" num "\">" ws "<connectionPointIn>" ws connection "</connectionPointIn>" ws "<expression>" name "</expression>" ws "</outVariable>" ws
+
+block ::= "<block localId=\"" num "\" typeName=\"" blockname "\"" instance? ">" ws "<inputVariables>" ws inpin* "</inputVariables>" ws "<outputVariables>" ws outpin* "</outputVariables>" ws "</block>" ws
+instance ::= " instanceName=\"" name "\""
+inpin  ::= "<variable formalParameter=\"" pin "\">" ws "<connectionPointIn>" ws connection "</connectionPointIn>" ws "</variable>" ws
+outpin ::= "<variable formalParameter=\"" pin "\"/>" ws
+connection ::= "<connection refLocalId=\"" num "\" formalParameter=\"" pin "\"/>" ws
+
+blockname ::= "WRITE_FILE" | "RUN" | "READ_FILE" | "MOVE" | "AND" | "OR" | "NOT" | "SR" | "RS" | "TON" | "CTU"
+pin ::= "EN" | "ENO" | "IN" | "IN1" | "IN2" | "OUT" | "Q" | "PATH" | "TEXT" | "CMD" | "ARGS" | "S" | "R" | "S1" | "R1" | "PT" | "ET" | "CU" | "PV" | "CV" | "RESET"
+
+literal ::= "TRUE" | "FALSE" | int | "'" [^'<>&]{0,200} "'"
+int  ::= "-"? [0-9]{1,9}
+name ::= [A-Za-z_] [A-Za-z0-9_]{0,63}
+num  ::= [1-9] [0-9]{0,4}
+ws   ::= [ \t\n]*
