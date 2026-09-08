@@ -10,30 +10,37 @@ extends Node
 @export var program_path: String = "res://plans/session.sgd"
 @export var workspace: String = "."
 @export var allow_always: PackedStringArray = []
-@onready var sandbox := $Sandbox
+# The guest runs in its own sandbox as this node's script: a SafeGDScript resource
+# set as Sandbox.program publishes no functions (RFD 2237).
+var guest: Node
 
 func _ready() -> void:
 	var program := load(program_path)
 	if program == null:
 		push_error("taskweft-acp: no program at %s" % program_path)
 		return
-	sandbox.set("program", program)
+	if program.has_method("get_compile_error") and program.get_compile_error() != "":
+		push_error("taskweft-acp: the program does not compile: " + program.get_compile_error())
+		return
+	guest = Node.new()
+	add_child(guest)
+	guest.set_script(program)
 	_run()
 
 func _run() -> void:
 	while true:
-		var i: int = sandbox.vmcall("pending")
+		var i: int = guest.call("pending")
 		if i < 0:
 			print("taskweft-acp: done")
 			return
-		var step: Dictionary = sandbox.vmcall("step", i)
+		var step: Dictionary = guest.call("step", i)
 		if not _permitted(step):
 			print("taskweft-acp: step %d %s refused" % [i, step["action"]])
-			sandbox.vmcall("record", i, 1)
+			guest.call("record", i, 1)
 			return
 		var code := _perform(step)
 		print("taskweft-acp: step %d %s exit %d" % [i, step["action"], code])
-		sandbox.vmcall("record", i, code)
+		guest.call("record", i, code)
 
 func _permitted(step: Dictionary) -> bool:
 	if step["action"] in allow_always:
