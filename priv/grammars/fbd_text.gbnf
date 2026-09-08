@@ -1,31 +1,40 @@
 # The text form of an FBD, as taskweft-fbd-compiler's `to-dsl` prints it and its
-# `.fbd` reader accepts (RFD 2236). One line per block, literals inline, wires by
-# name. The subset is the one `plcopen_fbd.gbnf` admits in XML; a completion under
-# this grammar is the same POU with far fewer tokens.
+# `.fbd` reader accepts (RFD 2236, RFD 2237). One line per block, literals inline,
+# wires by name. A program with `in` and `out` lines is a scan controller run once
+# per frame; one with only `var` lines and operating-system blocks is a step program.
 #
-#     program write_then_read
-#     var done : BOOL
-#     b3 = WRITE_FILE(PATH="out.txt", TEXT="hello")
-#     b5 = READ_FILE(EN=b3.ENO, PATH="out.txt")
-#     done = b5.ENO
+#     program walk_ctl
+#     in lx : REAL
+#     out speed : REAL
+#     b3 = MUL(IN1=lx, IN2=1.2)
+#     b6 = LIMIT(MN=0.0, IN=b3.OUT, MX=1.2)
+#     speed = b6.OUT
 
 root      ::= program vars blocks outs
 program   ::= "program " name "\n"
 vars      ::= var*
-var       ::= "var " name " : " type ("= " literal)? "\n"
-type      ::= "BOOL" | "INT" | "STRING"
+var       ::= ("in " | "out " | "var ") name " : " type (" = " literal)? "\n"
+type      ::= "BOOL" | "INT" | "REAL" | "TIME" | "STRING"
 blocks    ::= block+
-block     ::= name " = " typeName "(" args ")\n"
+block     ::= name " = " typeName ("[" name "]")? "(" args ")\n"
 typeName  ::= "WRITE_FILE" | "RUN" | "READ_FILE"
+            | "AND" | "OR" | "XOR" | "NOT" | "MOVE"
+            | "R_TRIG" | "F_TRIG" | "TON" | "TOF" | "TP" | "SR" | "RS"
+            | "SEL" | "MUX" | "LIMIT" | "MIN" | "MAX"
+            | "ADD" | "SUB" | "MUL" | "DIV" | "MOD"
+            | "EQ" | "NE" | "LT" | "GT" | "LE" | "GE"
 args      ::= arg ("," ws arg)*
 arg       ::= pin "=" value
 pin       ::= "EN" | "PATH" | "TEXT" | "CMD" | "ARGS"
-value     ::= string | ref | name
-ref       ::= name "." ("ENO" | "OUT")
+            | "IN" [0-9]* | "CLK" | "PT" | "S1" | "S" | "R1" | "R" | "G" | "K" | "MN" | "MX"
+value     ::= string | ref | literal | name
+ref       ::= name "." ("ENO" | "OUT" | "Q" | "Q1" | "ET")
 outs      ::= out*
 out       ::= name " = " ref "\n"
-literal   ::= string | "TRUE" | "FALSE" | int
+literal   ::= string | "TRUE" | "FALSE" | time | real | int
 int       ::= "-"? [0-9]+
+real      ::= "-"? [0-9]+ "." [0-9]+
+time      ::= "T#" ([0-9]+ ("." [0-9]+)? ("h" | "m" | "s" | "ms"))+
 string    ::= "\"" strchar* "\""
 strchar   ::= [^"\\'<>&\n] | "\\" ["\\nt]
 name      ::= [a-zA-Z_] [a-zA-Z0-9_]*
