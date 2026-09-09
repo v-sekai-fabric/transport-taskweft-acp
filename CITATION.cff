@@ -7,7 +7,7 @@ authors:
     given-names: K. S. Ernest (iFire)
     email: ernest.lee@chibifire.com
 license: MIT
-repository-code: https://github.com/v-sekai-fabric/transport-taskweft-acp
+repository-code: https://github.com/V-Sekai-fire/transport-taskweft-acp
 abstract: >-
   An Agent Client Protocol agent with no language model: a deterministic grammar turns a
   prompt into a taskweft planning problem, the plan is executed step by step through the
