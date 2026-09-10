@@ -4,7 +4,7 @@ name: Deploy
 # is a repository secret; without it the job fails, which is the honest state.
 on:
   push:
-    branches: [main]
+    branches: [main/main]
     paths:
       - "lib/**"
       - "config/**"
