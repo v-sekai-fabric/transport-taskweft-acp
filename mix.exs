@@ -45,7 +45,7 @@ defmodule TaskweftAcp.MixProject do
   # TASKWEFT_PATH points a desk at its own checkout; the git dependency is the default.
   defp taskweft_dep do
     case System.get_env("TASKWEFT_PATH") do
-      nil -> {:taskweft, git: "https://github.com/taskweft/taskweft.git", branch: "main"}
+      nil -> {:taskweft, git: "https://github.com/V-Sekai-fire/interactor-taskweft.git", branch: "main"}
       path -> {:taskweft, path: path}
     end
   end
